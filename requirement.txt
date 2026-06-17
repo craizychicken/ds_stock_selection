@@ -1,0 +1,9 @@
+jupyter
+yfinance
+pandas
+numpy
+matplotlib
+seaborn
+mysql-connector-python
+pyportfolioopt
+scikit-learn
