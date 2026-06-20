@@ -34,19 +34,19 @@ def connect_to_mysql(file_path, db_name):
     with open(file_path, "r") as f:
         login_info = json.load(f)
     try:
-        mydb = mysql.connector.connect(
+        connection = mysql.connector.connect(
             host=login_info["host"],
             user=login_info["user"],
             password=login_info["password"]
         )
 
-        mycursor = mydb.cursor()
+        mycursor = connection.cursor()
         if not check_database_exists(mycursor, db_name):
             create_database(mycursor, db_name)
     except mysql.connector.Error:
         return None
     mycursor.execute(f"USE {db_name}")
-    return mydb, mycursor
+    return connection, mycursor
 
 def check_table_exists(mycursor, tb_name):
     """Executes the code:
@@ -81,21 +81,50 @@ def insert_ticker(mycursor, ticker_list):
         mycursor.execute(query, (ticker,))
     return
 
-def create_stock_table(mycursor, symbol):
+def create_stock_table(mycursor):
     """Creates a table for a stock
     """
-    if check_table_exists(mycursor, symbol):
+    if check_table_exists(mycursor, "stock_data"):
         return
-    create_query = """CREATE TABLE (%s)(
-                        date    DATE,
-                        close   FLOAT,
-                        high    FLOAT,
-                        low     FLOAT,
-                        volume  BIGINT UNSIGNED,
-                        PRIMARY KEY (date))"""
-    mycursor.execute(create_query, (symbol,))
+    create_query = """CREATE TABLE stock_data(
+                        symbol VARCHAR(4),
+                        date DATE,
+                        close DECIMAL(10, 2),
+                        high DECIMAL(10, 2),
+                        low DECIMAL(10, 2),
+                        volume BIGINT,
+                        PRIMARY KEY (symbol, date),
+                        FOREIGN KEY (symbol) REFERENCES ticker_list(symbol))"""
+    mycursor.execute(create_query)
     return
 
-def close_connection(mydb):
+def insert_stock_data(mycursor, ticker, df):
+    """
+    Insert data from parsed csv to our stock data table
+    """
+    df = df.reset_index()
+    df["Date"] = df["Date"].dt.date
+
+    rows = [
+        (
+            ticker,
+            row.Date,
+            row.Close,
+            row.High,
+            row.Low,
+            row.Volume
+        )
+        for row in df.itertuples(index=False)
+    ]
+    query = """
+        INSERT INTO stock_data
+        (symbol, date, close, high, low, volume)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """
+
+    mycursor.executemany(query, rows)
+    return
+
+def close_connection(connection):
     # Close connection
-    mydb.close()
+    connection.close()
